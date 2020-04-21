@@ -27,6 +27,8 @@ import (
 	"gvisor.dev/gvisor/pkg/syserror"
 	"gvisor.dev/gvisor/pkg/usermem"
 	"gvisor.dev/gvisor/pkg/waiter"
+
+	"gvisor.dev/gvisor/pkg/log"
 )
 
 // inotifyEventBaseSize is the base size of linux's struct inotify_event. This
@@ -725,7 +727,7 @@ func (e *Event) equals(other *Event) bool {
 // that set the stats specified in mask.
 func InotifyEventFromStatMask(mask uint32) uint32 {
 	var ev uint32
-	if mask&(linux.STATX_UID|linux.STATX_GID|linux.STATX_MODE) != 0 {
+	if mask&(linux.STATX_UID|linux.STATX_GID) != 0 {
 		ev |= linux.IN_ATTRIB
 	}
 	if mask&linux.STATX_SIZE != 0 {
@@ -738,8 +740,9 @@ func InotifyEventFromStatMask(mask uint32) uint32 {
 	} else if mask&linux.STATX_ATIME != 0 {
 		ev |= linux.IN_ACCESS
 	} else if mask&linux.STATX_MTIME != 0 {
-		mask |= linux.IN_MODIFY
+		ev |= linux.IN_MODIFY
 	}
+	log.Infof("mask: 0x%x => ev: 0x%x", mask, ev)
 	return ev
 }
 
