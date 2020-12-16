@@ -508,6 +508,9 @@ type endpoint struct {
 	// shutdownFlags represent the current shutdown state of the endpoint.
 	shutdownFlags tcpip.ShutdownFlags
 
+	// rackPermitted is set to true if this endpoint is using RACK.
+	rackPermitted bool
+
 	// sackPermitted is set to true if the peer sends the TCPSACKPermitted
 	// option in the SYN/SYN-ACK.
 	sackPermitted bool
@@ -916,6 +919,11 @@ func newEndpoint(s *stack.Stack, netProto tcpip.NetworkProtocolNumber, waiterQue
 	var synRetries tcpip.TCPSynRetriesOption
 	if err := s.TransportProtocolOption(ProtocolNumber, &synRetries); err == nil {
 		e.maxSynRetries = uint8(synRetries)
+	}
+
+	var recovery tcpip.TCPRecovery
+	if err := s.TransportProtocolOption(ProtocolNumber, &recovery); err == nil {
+		e.rackPermitted = recovery == tcpip.TCPRACKLossDetection
 	}
 
 	if p := s.GetTCPProbe(); p != nil {
@@ -3072,7 +3080,7 @@ func (e *endpoint) completeState() stack.TCPEndpointState {
 		}
 	}
 
-	rc := e.snd.rc
+	rc := &e.snd.rc
 	s.Sender.RACKState = stack.TCPRACKState{
 		XmitTime:    rc.xmitTime,
 		EndSequence: rc.endSequence,
