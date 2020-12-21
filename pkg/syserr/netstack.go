@@ -93,7 +93,7 @@ func init() {
 	addErrMapping(tcpip.ErrConnectionAborted, ErrConnectionAborted)
 	addErrMapping(tcpip.ErrNoSuchFile, ErrNoSuchFile)
 	addErrMapping(tcpip.ErrInvalidOptionValue, ErrInvalidOptionValue)
-	addErrMapping(tcpip.ErrNoLinkAddress, ErrHostDown)
+	addErrMapping(tcpip.ErrNoLinkAddress, ErrNoRoute)
 	addErrMapping(tcpip.ErrBadAddress, ErrBadAddress)
 	addErrMapping(tcpip.ErrNetworkUnreachable, ErrNetworkUnreachable)
 	addErrMapping(tcpip.ErrMessageTooLong, ErrMessageTooLong)
