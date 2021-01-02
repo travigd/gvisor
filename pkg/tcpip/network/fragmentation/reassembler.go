@@ -20,7 +20,6 @@ import (
 
 	"gvisor.dev/gvisor/pkg/sync"
 	"gvisor.dev/gvisor/pkg/tcpip"
-	"gvisor.dev/gvisor/pkg/tcpip/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
@@ -29,7 +28,7 @@ type hole struct {
 	last   uint16
 	filled bool
 	final  bool
-	data   buffer.View
+	pkt    *stack.PacketBuffer
 }
 
 type reassembler struct {
@@ -59,14 +58,14 @@ func newReassembler(id FragmentID, clock tcpip.Clock) *reassembler {
 	return r
 }
 
-func (r *reassembler) process(first, last uint16, more bool, proto uint8, pkt *stack.PacketBuffer) (buffer.VectorisedView, uint8, bool, int, error) {
+func (r *reassembler) process(first, last uint16, more bool, proto uint8, pkt *stack.PacketBuffer) (*stack.PacketBuffer, uint8, bool, int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.done {
 		// A concurrent goroutine might have already reassembled
 		// the packet and emptied the heap while this goroutine
 		// was waiting on the mutex. We don't have to do anything in this case.
-		return buffer.VectorisedView{}, 0, false, 0, nil
+		return nil, 0, false, 0, nil
 	}
 
 	var holeFound bool
@@ -90,12 +89,12 @@ func (r *reassembler) process(first, last uint16, more bool, proto uint8, pkt *s
 		// https://github.com/torvalds/linux/blob/38525c6/net/ipv4/inet_fragment.c#L349
 		if first < currentHole.first || currentHole.last < last {
 			// Incoming fragment only partially fits in the free hole.
-			return buffer.VectorisedView{}, 0, false, 0, ErrFragmentOverlap
+			return nil, 0, false, 0, ErrFragmentOverlap
 		}
 		if !more {
 			if !currentHole.final || currentHole.filled && currentHole.last != last {
 				// We have another final fragment, which does not perfectly overlap.
-				return buffer.VectorisedView{}, 0, false, 0, ErrFragmentConflict
+				return nil, 0, false, 0, ErrFragmentConflict
 			}
 		}
 
@@ -124,8 +123,7 @@ func (r *reassembler) process(first, last uint16, more bool, proto uint8, pkt *s
 			})
 			currentHole.final = false
 		}
-		v := pkt.Data.ToOwnedView()
-		consumed = v.Size()
+		consumed = pkt.Data.Size()
 		r.size += consumed
 		// Update the current hole to precisely match the incoming fragment.
 		r.holes[i] = hole{
@@ -133,7 +131,7 @@ func (r *reassembler) process(first, last uint16, more bool, proto uint8, pkt *s
 			last:   last,
 			filled: true,
 			final:  currentHole.final,
-			data:   v,
+			pkt:    pkt,
 		}
 		r.filled++
 		// For IPv6, it is possible to have different Protocol values between
@@ -153,25 +151,24 @@ func (r *reassembler) process(first, last uint16, more bool, proto uint8, pkt *s
 	}
 	if !holeFound {
 		// Incoming fragment is beyond end.
-		return buffer.VectorisedView{}, 0, false, 0, ErrFragmentConflict
+		return nil, 0, false, 0, ErrFragmentConflict
 	}
 
 	// Check if all the holes have been filled and we are ready to reassemble.
 	if r.filled < len(r.holes) {
-		return buffer.VectorisedView{}, 0, false, consumed, nil
+		return nil, 0, false, consumed, nil
 	}
 
 	sort.Slice(r.holes, func(i, j int) bool {
 		return r.holes[i].first < r.holes[j].first
 	})
 
-	var size int
-	views := make([]buffer.View, 0, len(r.holes))
-	for _, hole := range r.holes {
-		views = append(views, hole.data)
-		size += hole.data.Size()
+	resPkt := r.holes[0].pkt
+	for i := 1; i < len(r.holes); i++ {
+		fragPkt := r.holes[i].pkt
+		fragPkt.Data.ReadToVV(&resPkt.Data, fragPkt.Data.Size())
 	}
-	return buffer.NewVectorisedView(size, views), r.proto, true, consumed, nil
+	return resPkt, r.proto, true, consumed, nil
 }
 
 func (r *reassembler) checkDoneOrMark() bool {

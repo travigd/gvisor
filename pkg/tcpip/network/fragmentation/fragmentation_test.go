@@ -112,20 +112,20 @@ func TestFragmentationProcess(t *testing.T) {
 			f := NewFragmentation(minBlockSize, 1024, 512, reassembleTimeout, &faketime.NullClock{}, nil)
 			firstFragmentProto := c.in[0].proto
 			for i, in := range c.in {
-				vv, proto, done, err := f.Process(in.id, in.first, in.last, in.more, in.proto, in.pkt)
+				resPkt, proto, done, err := f.Process(in.id, in.first, in.last, in.more, in.proto, in.pkt)
 				if err != nil {
 					t.Fatalf("f.Process(%+v, %d, %d, %t, %d, %#v) failed: %s",
 						in.id, in.first, in.last, in.more, in.proto, in.pkt, err)
-				}
-				if !reflect.DeepEqual(vv, c.out[i].vv) {
-					t.Errorf("got Process(%+v, %d, %d, %t, %d, %#v) = (%X, _, _, _), want = (%X, _, _, _)",
-						in.id, in.first, in.last, in.more, in.proto, in.pkt, vv.ToView(), c.out[i].vv.ToView())
 				}
 				if done != c.out[i].done {
 					t.Errorf("got Process(%+v, %d, %d, %t, %d, _) = (_, _, %t, _), want = (_, _, %t, _)",
 						in.id, in.first, in.last, in.more, in.proto, done, c.out[i].done)
 				}
 				if c.out[i].done {
+					if got, want := resPkt.Data.ToOwnedView(), c.out[i].vv.ToOwnedView(); !reflect.DeepEqual(got, want) {
+						t.Errorf("got Process(%+v, %d, %d, %t, %d, %#v) = (%X, _, _, _), want = (%X, _, _, _)",
+							in.id, in.first, in.last, in.more, in.proto, in.pkt, got, want)
+					}
 					if firstFragmentProto != proto {
 						t.Errorf("got Process(%+v, %d, %d, %t, %d, _) = (_, %d, _, _), want = (_, %d, _, _)",
 							in.id, in.first, in.last, in.more, in.proto, proto, firstFragmentProto)
