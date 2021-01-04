@@ -30,27 +30,37 @@ type Range struct {
 
 // WellFormed returns true if r.Start <= r.End. All other methods on a Range
 // require that the Range is well-formed.
+//
+//go:nosplit
 func (r Range) WellFormed() bool {
 	return r.Start <= r.End
 }
 
 // Length returns the length of the range.
+//
+//go:nosplit
 func (r Range) Length() T {
 	return r.End - r.Start
 }
 
 // Contains returns true if r contains x.
+//
+//go:nosplit
 func (r Range) Contains(x T) bool {
 	return r.Start <= x && x < r.End
 }
 
 // Overlaps returns true if r and r2 overlap.
+//
+//go:nosplit
 func (r Range) Overlaps(r2 Range) bool {
 	return r.Start < r2.End && r2.Start < r.End
 }
 
 // IsSupersetOf returns true if r is a superset of r2; that is, the range r2 is
 // contained within r.
+//
+//go:nosplit
 func (r Range) IsSupersetOf(r2 Range) bool {
 	return r.Start <= r2.Start && r.End >= r2.End
 }
@@ -58,6 +68,8 @@ func (r Range) IsSupersetOf(r2 Range) bool {
 // Intersect returns a range consisting of the intersection between r and r2.
 // If r and r2 do not overlap, Intersect returns a range with unspecified
 // bounds, but for which Length() == 0.
+//
+//go:nosplit
 func (r Range) Intersect(r2 Range) Range {
 	if r.Start < r2.Start {
 		r.Start = r2.Start
@@ -71,9 +83,34 @@ func (r Range) Intersect(r2 Range) Range {
 	return r
 }
 
+// Exclude returns the range excluding r2. If there is no overlap between the
+// ranges, then r will be returned unchanged as the first result, and the
+// second range will have unspecified bounds, but Length() == 0.
+//
+//go:nosplit
+func (r Range) Exclude(r2 Range) (Range, Range) {
+	r2 = r.Intersect(r2)
+	if r2.Length() == 0 {
+		// There is no overlap.
+		return r, Range{0, 0}
+	}
+	if r2.Start == r.Start {
+		// The excluded region is at the start.
+		return Range{r2.End, r.End}, Range{0, 0}
+	}
+	if r2.End == r.End {
+		// The excluded region is at the end.
+		return Range{r2.Start, r2.Start}, Range{0, 0}
+	}
+	// The excluded region is in the middle.
+	return Range{r.Start, r2.Start}, Range{r2.End, r.End}
+}
+
 // CanSplitAt returns true if it is legal to split a segment spanning the range
 // r at x; that is, splitting at x would produce two ranges, both of which have
 // non-zero length.
+//
+//go:nosplit
 func (r Range) CanSplitAt(x T) bool {
 	return r.Contains(x) && r.Start < x
 }
