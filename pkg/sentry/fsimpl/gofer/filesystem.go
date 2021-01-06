@@ -407,7 +407,16 @@ func (fs *filesystem) doCreateAt(ctx context.Context, rp *vfs.ResolvingPath, dir
 	if err != nil {
 		return err
 	}
-	if err := parent.checkPermissions(rp.Credentials(), vfs.MayWrite|vfs.MayExec); err != nil {
+
+	parent.dirMu.Lock()
+	defer parent.dirMu.Unlock()
+
+	// Check for existence before checking for permissions, like Linux does.
+	_, err = fs.stepLocked(ctx, rp, parent, true /* mayFollowSymlinks */, &ds)
+	if err == nil {
+		return syserror.EEXIST
+	}
+	if err != syserror.ENOENT {
 		return err
 	}
 	name := rp.Component()
@@ -425,8 +434,10 @@ func (fs *filesystem) doCreateAt(ctx context.Context, rp *vfs.ResolvingPath, dir
 		return err
 	}
 	defer mnt.EndWrite()
-	parent.dirMu.Lock()
-	defer parent.dirMu.Unlock()
+
+	if err := parent.checkPermissions(rp.Credentials(), vfs.MayWrite|vfs.MayExec); err != nil {
+		return err
+	}
 	if parent.isSynthetic() {
 		if child := parent.children[name]; child != nil {
 			return syserror.EEXIST
