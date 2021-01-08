@@ -2061,6 +2061,63 @@ TEST_P(UdpSocketTest, SendToZeroPort) {
               SyscallSucceedsWithValue(sizeof(buf)));
 }
 
+TEST_P(UdpSocketTest, DisconnectByUnspecifiedAddr) {
+  ASSERT_NO_ERRNO(BindLoopback());
+
+  struct sockaddr_storage any_storage = InetAnyAddr();
+  struct sockaddr* any = reinterpret_cast<struct sockaddr*>(&any_storage);
+  SetPort(&any_storage, *Port(&bind_addr_storage_) + 1);
+  ASSERT_NO_ERRNO(BindSocket(sock_.get(), any));
+
+  auto connect_then_disconnect =
+      [this, &any_storage](struct sockaddr_storage disconnect_addr) {
+        for (int i = 0; i < 2; i++) {
+          // Try to connect again.
+          EXPECT_THAT(connect(sock_.get(), bind_addr_, addrlen_),
+                      SyscallSucceeds());
+
+          // Check that we're connected to the right peer.
+          struct sockaddr_storage peer;
+          socklen_t peerlen = sizeof(peer);
+          EXPECT_THAT(getpeername(sock_.get(),
+                                  reinterpret_cast<sockaddr*>(&peer), &peerlen),
+                      SyscallSucceeds());
+          EXPECT_EQ(peerlen, addrlen_);
+          EXPECT_EQ(memcmp(&peer, bind_addr_, addrlen_), 0);
+
+          // Try to disconnect using disconnect_addr.
+          EXPECT_THAT(
+              connect(sock_.get(),
+                      reinterpret_cast<sockaddr*>(&disconnect_addr), addrlen_),
+              SyscallSucceeds());
+
+          peerlen = sizeof(peer);
+          EXPECT_THAT(getpeername(sock_.get(),
+                                  reinterpret_cast<sockaddr*>(&peer), &peerlen),
+                      SyscallFailsWithErrno(ENOTCONN));
+
+          // Check that we're still bound.
+          struct sockaddr_storage addr;
+          socklen_t addrlen = sizeof(addr);
+          EXPECT_THAT(getsockname(sock_.get(),
+                                  reinterpret_cast<sockaddr*>(&addr), &addrlen),
+                      SyscallSucceeds());
+          EXPECT_EQ(addrlen, addrlen_);
+          EXPECT_EQ(*Port(&addr), *Port(&any_storage));
+        }
+      };
+
+  // Disconnect using unspecified address.
+  connect_then_disconnect(InetAnyAddr());
+  if (GetFamily() == AF_INET6) {
+    // Disconnect using v4 mapped v6 unspecified address.
+    struct sockaddr_storage addr = InetAnyAddr();
+    auto sin6 = reinterpret_cast<struct sockaddr_in6*>(&addr);
+    sin6->sin6_addr.s6_addr[10] = sin6->sin6_addr.s6_addr[11] = 0xff;
+    connect_then_disconnect(addr);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(AllInetTests, UdpSocketTest,
                          ::testing::Values(AddressFamily::kIpv4,
                                            AddressFamily::kIpv6,

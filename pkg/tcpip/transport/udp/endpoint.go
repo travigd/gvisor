@@ -17,6 +17,7 @@ package udp
 import (
 	"fmt"
 	"io"
+	"net"
 	"sync/atomic"
 
 	"gvisor.dev/gvisor/pkg/sync"
@@ -973,9 +974,9 @@ func (e *endpoint) Disconnect() *tcpip.Error {
 
 // Connect connects the endpoint to its peer. Specifying a NIC is optional.
 func (e *endpoint) Connect(addr tcpip.FullAddress) *tcpip.Error {
-	if addr.Port == 0 {
-		// We don't support connecting to port zero.
-		return tcpip.ErrInvalidEndpointState
+	// Disconnect when addr is unspecified.
+	if addr.Port == 0 && (len(addr.Addr) == 0 || net.IP(addr.Addr).IsUnspecified()) {
+		return e.Disconnect()
 	}
 
 	e.mu.Lock()
