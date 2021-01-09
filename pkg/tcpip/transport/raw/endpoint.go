@@ -341,18 +341,6 @@ func (e *endpoint) write(p tcpip.Payloader, opts tcpip.WriteOptions) (int64, <-c
 // finishWrite writes the payload to a route. It resolves the route if
 // necessary. It's really just a helper to make defer unnecessary in Write.
 func (e *endpoint) finishWrite(payloadBytes []byte, route *stack.Route) (int64, <-chan struct{}, *tcpip.Error) {
-	// We may need to resolve the route (match a link layer address to the
-	// network address). If that requires blocking (e.g. to use ARP),
-	// return a channel on which the caller can wait.
-	if route.IsResolutionRequired() {
-		if ch, err := route.Resolve(nil); err != nil {
-			if err == tcpip.ErrWouldBlock {
-				return 0, ch, tcpip.ErrNoLinkAddress
-			}
-			return 0, nil, err
-		}
-	}
-
 	if e.ops.GetHeaderIncluded() {
 		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 			Data: buffer.View(payloadBytes).ToVectorisedView(),

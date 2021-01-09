@@ -183,15 +183,8 @@ func TestPing(t *testing.T) {
 			}
 			defer ep.Close()
 
-			// The first write should trigger link resolution.
 			icmpBuf := test.icmpBuf(t)
 			wOpts := tcpip.WriteOptions{To: &tcpip.FullAddress{Addr: test.remoteAddr}}
-			if _, ch, err := ep.Write(tcpip.SlicePayload(icmpBuf), wOpts); err != tcpip.ErrNoLinkAddress {
-				t.Fatalf("got ep.Write(_, _) = %s, want = %s", err, tcpip.ErrNoLinkAddress)
-			} else {
-				// Wait for link resolution to complete.
-				<-ch
-			}
 			if n, _, err := ep.Write(tcpip.SlicePayload(icmpBuf), wOpts); err != nil {
 				t.Fatalf("ep.Write(_, _): %s", err)
 			} else if want := int64(len(icmpBuf)); n != want {

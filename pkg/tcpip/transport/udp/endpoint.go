@@ -516,15 +516,6 @@ func (e *endpoint) write(p tcpip.Payloader, opts tcpip.WriteOptions) (int64, <-c
 		return 0, nil, tcpip.ErrBroadcastDisabled
 	}
 
-	if route.IsResolutionRequired() {
-		if ch, err := route.Resolve(nil); err != nil {
-			if err == tcpip.ErrWouldBlock {
-				return 0, ch, tcpip.ErrNoLinkAddress
-			}
-			return 0, nil, err
-		}
-	}
-
 	v, err := p.FullPayload()
 	if err != nil {
 		return 0, nil, err
